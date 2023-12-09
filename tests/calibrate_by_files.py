@@ -4,7 +4,7 @@ import glob
 
 # 棋盘格每行每列角点个数
 BOARDSIZE = (6, 9)
-# 棋盘格每个格子的物理尺寸
+# 棋盘格每个格子的物理尺寸 单位: mm
 DISTANCE = 21
 
 # 保存棋盘格上角点的三维坐标
@@ -12,7 +12,7 @@ objpoints_img = []
 
 # 三维世界坐标
 obj_world_pts = np.zeros((np.prod(BOARDSIZE), 3), np.float32)
-obj_world_pts[:, :2] = np.indices(BOARDSIZE).T.reshape(-1, 2)
+obj_world_pts[:, :2] = np.indices(BOARDSIZE).T.reshape(-1, 2) * DISTANCE
 
 # 保存所有角点
 images_points = []
@@ -45,8 +45,8 @@ for path in images_path:
         images_points.append(img_corner_points)
 
     # 显示棋盘格角点
-    # cv2.imshow('image', image)
-    # cv2.waitKey(200)
+    cv2.imshow('image', image)
+    cv2.waitKey(200)
 
 # 计算内参和畸变系数等
 _, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(objpoints_img, images_points, img_gray.shape[::-1], None, None)

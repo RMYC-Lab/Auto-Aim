@@ -4,6 +4,29 @@ import numpy as np
 from utils.colors import RED_COLOR, GREEN_COLOR
 import json
 import math
+import time
+from structure.marker_target import MarkerTarget as MT
+from service.uart import UartRobotCtrl
+from utils.pid import PIDCtrl
+
+x_pid = PIDCtrl(0.1, 0, 0)
+y_pid = PIDCtrl(0.1, 0, 0)
+
+PORT = 'COM3'
+
+# 初始化机器人
+robot = UartRobotCtrl(PORT)
+times = 3
+is_connected = False
+shoot_delay = 0.5
+max_follow_time = 2
+while is_connected is False and times > 0:
+    is_connected = robot.connect()
+    times -= 1
+
+if is_connected is False:
+    print('Connect failed')
+    raise Exception('Connect failed')
 
 
 SIZE = (1280, 720)
@@ -68,6 +91,8 @@ def get_color(event, x, y, flags, param):
         # 打印颜色值
         print('HSV:', param[y, x])
 
+last_shoot_time = 0
+last_find_time = 0
 
 while True:
     # 读取摄像头的每一帧
@@ -127,9 +152,8 @@ while True:
 
     binary2 = cv2.cvtColor(binary.copy(), cv2.COLOR_GRAY2BGR)
 
-    # 遍历每一个轮廓 
-
-
+    marker_list = []
+    # 遍历每一个轮廓
     for index, each_contour in enumerate(contours):
         if len(each_contour) < 5:
             continue
@@ -154,7 +178,7 @@ while True:
             # cv2.rectangle(binary2, (int(other_center_x - current_ignore_w), int(other_center_y - current_ignore_h)), \
             #               (int(other_center_x + current_ignore_w), int(other_center_y)), (0, 0, 255), 1)
             if other_center_x - current_ignore_w < center_x < other_center_x + current_ignore_w and \
-                    other_center_y < center_y < other_center_y + current_ignore_h:
+                    other_center_y - current_ignore_h < center_y < other_center_y:
                 is_above = True
                 break
 
@@ -219,7 +243,7 @@ while True:
         eulerAngles = -cv2.decomposeProjectionMatrix(proj_matrix)[6]  # 欧拉角
         pitch, yaw, roll = eulerAngles[0], eulerAngles[1], eulerAngles[2]
         print(index, "distance:", distance, "pitch:", pitch, "yaw:", yaw, "roll:", roll)
-
+        marker_list.append(MT(cX, cY, distance, *CENTER_POINT, w*X_ERROR, h*Y_ERROR))
         # cv2.line(dst, (cX, cY), CENTER_POINT, (0, 0, 255), 1)
         # distance = np.sqrt((cX - CENTER_POINT[0]) ** 2 + (cY - CENTER_POINT[1]) ** 2)
         # z = F * MARKER_W / w
@@ -239,6 +263,29 @@ while True:
     # cv2.imshow('Contours', dst)
     # cv2.setMouseCallback('Contours', get_x_y)
     cv2.imshow('Contours2', binary2)
+
+    marker_list.sort(key=lambda target: target.get_center_distance())
+    if len(marker_list) > 0:
+        last_find_time = time.time()
+        if marker_list[0].is_shootable():
+            if time.time() - last_shoot_time > shoot_delay:
+                last_shoot_time = time.time()
+                robot.set_blaster_bead(1)
+                robot.blaster_fire()
+                print('shoot')
+        else:
+            # 计算PID
+            x_pid.set_error(marker_list[0].get_x_error())
+            y_pid.set_error(marker_list[0].get_y_error())
+            x_output = int(x_pid.get_output())
+            y_output = int(y_pid.get_output())
+            if robot.get_gimbal_attitude()
+            robot.gimbal_speed(x_output, y_output)
+            print('move')
+
+    if time.time() - last_find_time > max_follow_time:
+        robot.gimbal_speed(0, 0)
+        print('Lost target')
 
     # 检查用户是否按下了 'q' 键
     if cv2.waitKey(1) & 0xFF == ord('q'):
