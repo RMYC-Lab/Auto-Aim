@@ -7,7 +7,8 @@ import time
 class PIDCtrl(object):
     """PID 控制器"""
 
-    def __init__(self, kp=0.0, ki=0.0, kd=0.0):
+    def __init__(self, kp: float = 0.0, ki: float = 0.0, kd: float = 0.0,
+                 min_output: float = -float('inf'), max_output: float = float('inf')):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -17,6 +18,8 @@ class PIDCtrl(object):
         self.error = 0
         self.last_error = 0
         self.last_time = 0
+        self.min_output = min_output
+        self.max_output = max_output
 
     def reset(self):
         self.kp_item = 0
@@ -47,4 +50,9 @@ class PIDCtrl(object):
             self.ki_item = self.ki_item + 1 * self.ki * self.error
             self.kd_item = self.kd * (self.error - self.last_error) / 1
             self.last_error = self.error
-        return self.kp_item + self.ki_item + self.kd_item
+        output = self.kp_item + self.ki_item + self.kd_item
+        if output > self.max_output:
+            output = self.max_output
+        elif output < self.min_output:
+            output = self.min_output
+        return output

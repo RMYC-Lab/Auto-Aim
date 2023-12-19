@@ -6,11 +6,17 @@ import json
 import math
 import time
 from structure.marker_target import MarkerTarget as MT
+from structure.marker_target import set_center, set_shoot_region, set_full_resolution
 from service.uart import UartRobotCtrl
 from utils.pid import PIDCtrl
+from utils.region import Region
+from typing import List
 
-x_pid = PIDCtrl(0.1, 0, 0)
-y_pid = PIDCtrl(0.1, 0, 0)
+# x_pid = PIDCtrl(0.06, 0.001, 0.01)
+# y_pid = PIDCtrl(0.01, 0.01, 0.01)
+x_pid = PIDCtrl(112, 1, 1, -25, 25)
+y_pid = PIDCtrl(80, 1, 1, -25, 25)
+
 
 PORT = 'COM3'
 
@@ -19,7 +25,9 @@ robot = UartRobotCtrl(PORT)
 times = 3
 is_connected = False
 shoot_delay = 0.5
-max_follow_time = 2
+max_follow_time = 0.7
+max_pitch = 20
+min_pitch = -20
 while is_connected is False and times > 0:
     is_connected = robot.connect()
     times -= 1
@@ -28,14 +36,19 @@ if is_connected is False:
     print('Connect failed')
     raise Exception('Connect failed')
 
+robot.set_robot_mode('free')  # 设置机器人模式为自由模式
+
 
 SIZE = (1280, 720)
+set_full_resolution(*SIZE)
 CAMERA_F = 888
 MARKER_W = 52
 MARKER_H = 28
 X_ERROR = 1.5
 Y_ERROR = 1.3
-CENTER_POINT = (578, 439)
+# CENTER_POINT = (578, 439)
+CENTER_POINT = SIZE[0] // 2, SIZE[1] // 2 + 40
+set_center(*CENTER_POINT)
 ERROR_DIS = 20
 IGNORE_W = 3
 IGNORE_H = 10
@@ -54,12 +67,13 @@ MARKER_POINTS = np.array([
 CORRECT_COLOR = GREEN_COLOR
 WRONG_COLOR = RED_COLOR
 
+
 # BLUE1
-h_min = 83
-h_max = 117
-s_min = 0
-s_max = 255
-v_min = 156
+h_min = 87
+h_max = 119
+s_min = 98
+s_max = 228
+v_min = 170
 v_max = 255
 # h_min, s_min, v_min, h_max, s_max, v_max = 0, 0, 0, 179, 255, 255
 
@@ -90,6 +104,7 @@ def get_color(event, x, y, flags, param):
         # 获取鼠标点击的位置的颜色值
         # 打印颜色值
         print('HSV:', param[y, x])
+
 
 last_shoot_time = 0
 last_find_time = 0
@@ -152,15 +167,23 @@ while True:
 
     binary2 = cv2.cvtColor(binary.copy(), cv2.COLOR_GRAY2BGR)
 
-    marker_list = []
+    marker_list: List[MT] = []
     # 遍历每一个轮廓
     for index, each_contour in enumerate(contours):
         if len(each_contour) < 5:
             continue
+        # 绘制质心
+        mn = cv2.moments(each_contour)
+        if mn["m00"] == 0:
+            continue
+        cX = int(mn["m10"] / mn["m00"])
+        cY = int(mn["m01"] / mn["m00"])
         # 获取轮廓的外接矩形
         x, y, w, h = cv2.boundingRect(each_contour)
-        center_x = x + w / 2
-        center_y = y + h / 2
+        # center_x = x + w / 2
+        # center_y = y + h / 2
+        center_x = cX
+        center_y = cY
         if w / h < 1 or w < MIN_W or h < MIN_H:
             # 过滤掉宽高比小于 1 的轮廓 以及宽高小于最小阈值的轮廓
             continue
@@ -171,14 +194,17 @@ while True:
             if other_contour is each_contour:
                 continue
             other_x, other_y, other_w, other_h = cv2.boundingRect(other_contour)
-            current_ignore_w = IGNORE_W * other_w
-            current_ignore_h = IGNORE_H * other_h
             other_center_x = other_x + other_w / 2
             other_center_y = other_y + other_h / 2
+            other_region = Region(center_x=other_center_x, center_y=other_center_y, w=other_w * IGNORE_W, h=other_h * IGNORE_H,
+                                  expand_bottom=False)
+            current_ignore_w = IGNORE_W * other_w
+            current_ignore_h = IGNORE_H * other_h
             # cv2.rectangle(binary2, (int(other_center_x - current_ignore_w), int(other_center_y - current_ignore_h)), \
             #               (int(other_center_x + current_ignore_w), int(other_center_y)), (0, 0, 255), 1)
-            if other_center_x - current_ignore_w < center_x < other_center_x + current_ignore_w and \
-                    other_center_y - current_ignore_h < center_y < other_center_y:
+            # if other_center_x - current_ignore_w < center_x < other_center_x + current_ignore_w and \
+            #         other_center_y - current_ignore_h < center_y < other_center_y:
+            if other_region.is_in_region(center_x, center_y):
                 is_above = True
                 break
 
@@ -208,27 +234,21 @@ while True:
         # if min_ellipse[0] and min_ellipse[1]:
         #     cv2.ellipse(dst, min_ellipse, (255, 0, 0), 2)
         #     cv2.ellipse(binary2, min_ellipse, (255, 0, 0), 2)
-        # 绘制质心
-        mn = cv2.moments(each_contour)
-        if mn["m00"] == 0:
-            continue
-        cX = int(mn["m10"] / mn["m00"])
-        cY = int(mn["m01"] / mn["m00"])
         # 获取误差允许范围
-        current_x_error = X_ERROR * w / 2
-        current_y_error = Y_ERROR * h / 2
+        # current_x_error = X_ERROR * w / 2
+        # current_y_error = Y_ERROR * h / 2
         # 绘制误差允许范围
-        cv2.rectangle(binary2, (int(cX - current_x_error), int(cY - current_y_error)),
-                      (int(cX + current_x_error), int(cY + current_y_error)), (0, 0, 255), 1)
+        # cv2.rectangle(binary2, (int(cX - current_x_error), int(cY - current_y_error)),
+        #               (int(cX + current_x_error), int(cY + current_y_error)), (0, 0, 255), 1)
         # 判断质心是否在误差允许范围内
-        if CENTER_POINT[0] - current_x_error < cX < CENTER_POINT[0] + current_x_error and \
-                CENTER_POINT[1] - current_y_error < cY < CENTER_POINT[1] + current_y_error:
-            cv2.line(binary2, (cX, cY), CENTER_POINT, CORRECT_COLOR, 1)
-        else:
-            cv2.line(binary2, (cX, cY), CENTER_POINT, WRONG_COLOR, 1)
+        # if CENTER_POINT[0] - current_x_error < cX < CENTER_POINT[0] + current_x_error and \
+        #         CENTER_POINT[1] - current_y_error < cY < CENTER_POINT[1] + current_y_error:
+        #     cv2.line(binary2, (cX, cY), CENTER_POINT, CORRECT_COLOR, 1)
+        # else:
+        #     cv2.line(binary2, (cX, cY), CENTER_POINT, WRONG_COLOR, 1)
         # 使用 PNP 求解距离
-        image_points = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
-        _, rvec, tvec = cv2.solvePnP(MARKER_POINTS, image_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+        # image_points = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
+        # _, rvec, tvec = cv2.solvePnP(MARKER_POINTS, image_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
         # flag 参数:
         # SOLVEPNP_ITERATIVE 使用迭代算法寻找最优解
         # SOLVEPNP_P3P 使用 P3P 算法寻找最优解
@@ -237,13 +257,13 @@ while True:
         # SOLVEPNP_UPNP 使用 UPNP 算法寻找最优解
         # SOLVEPNP_AP3P 使用 AP3P 算法寻找最优解
         # SOLVEPNP_MAX_COUNT 使用迭代算法寻找最优解时的最大迭代次数
-        distance = math.sqrt(tvec[0]**2 + tvec[1]**2 + tvec[2]**2) / 10
-        rvec_matrix = cv2.Rodrigues(rvec)[0]
-        proj_matrix = np.hstack((rvec_matrix, rvec))
-        eulerAngles = -cv2.decomposeProjectionMatrix(proj_matrix)[6]  # 欧拉角
-        pitch, yaw, roll = eulerAngles[0], eulerAngles[1], eulerAngles[2]
-        print(index, "distance:", distance, "pitch:", pitch, "yaw:", yaw, "roll:", roll)
-        marker_list.append(MT(cX, cY, distance, *CENTER_POINT, w*X_ERROR, h*Y_ERROR))
+        # distance = math.sqrt(tvec[0]**2 + tvec[1]**2 + tvec[2]**2) / 10
+        # rvec_matrix = cv2.Rodrigues(rvec)[0]
+        # proj_matrix = np.hstack((rvec_matrix, rvec))
+        # eulerAngles = -cv2.decomposeProjectionMatrix(proj_matrix)[6]  # 欧拉角
+        # pitch, yaw, roll = eulerAngles[0], eulerAngles[1], eulerAngles[2]
+        # print(index, "distance:", distance, "pitch:", pitch, "yaw:", yaw, "roll:", roll)
+        marker_list.append(MT(cX, cY, 0, w, h, w*X_ERROR, h*Y_ERROR))
         # cv2.line(dst, (cX, cY), CENTER_POINT, (0, 0, 255), 1)
         # distance = np.sqrt((cX - CENTER_POINT[0]) ** 2 + (cY - CENTER_POINT[1]) ** 2)
         # z = F * MARKER_W / w
@@ -264,10 +284,14 @@ while True:
     # cv2.setMouseCallback('Contours', get_x_y)
     cv2.imshow('Contours2', binary2)
 
-    marker_list.sort(key=lambda target: target.get_center_distance())
+    marker_list.sort(key=lambda target: (target.y + target.h)*(target.w*target.h), reverse=True)
     if len(marker_list) > 0:
+        shoot_marker = marker_list[0]
         last_find_time = time.time()
-        if marker_list[0].is_shootable():
+        shoot_region = Region(center_x=CENTER_POINT[0], center_y=CENTER_POINT[1]+40,
+                              w=shoot_marker.w * X_ERROR, h=shoot_marker.h * Y_ERROR,
+                              expand_bottom=False)
+        if shoot_marker.is_shootable() and False:
             if time.time() - last_shoot_time > shoot_delay:
                 last_shoot_time = time.time()
                 robot.set_blaster_bead(1)
@@ -275,16 +299,18 @@ while True:
                 print('shoot')
         else:
             # 计算PID
-            x_pid.set_error(marker_list[0].get_x_error())
-            y_pid.set_error(marker_list[0].get_y_error())
-            x_output = int(x_pid.get_output())
-            y_output = int(y_pid.get_output())
-            if robot.get_gimbal_attitude()
-            robot.gimbal_speed(x_output, y_output)
+            x_pid.set_error(shoot_marker.get_x_error())
+            y_pid.set_error(shoot_marker.get_y_error())
+            x_output = x_pid.get_output()
+            y_output = y_pid.get_output()
+            # if not min_pitch <= robot.get_gimbal_attitude()[0] <= max_pitch:
+            #     x_output = 0
+            robot.gimbal_speed(y_output, x_output)
             print('move')
 
     if time.time() - last_find_time > max_follow_time:
-        robot.gimbal_speed(0, 0)
+        # robot.gimbal_speed(0, 0)
+        robot.gimbal_recenter()
         print('Lost target')
 
     # 检查用户是否按下了 'q' 键
