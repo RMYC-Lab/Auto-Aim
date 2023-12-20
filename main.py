@@ -14,8 +14,8 @@ from typing import List
 
 # x_pid = PIDCtrl(0.06, 0.001, 0.01)
 # y_pid = PIDCtrl(0.01, 0.01, 0.01)
-x_pid = PIDCtrl(112, 1, 1, -25, 25)
-y_pid = PIDCtrl(80, 1, 1, -25, 25)
+x_pid = PIDCtrl(130, 10, 1, -25, 25)
+y_pid = PIDCtrl(80, 10, 1, -25, 25)
 
 
 PORT = 'COM3'
@@ -69,11 +69,18 @@ WRONG_COLOR = RED_COLOR
 
 
 # BLUE1
-h_min = 87
+# h_min = 87
+# h_max = 119
+# s_min = 98
+# s_max = 228
+# v_min = 170
+# v_max = 255
+# BLUE3
+h_min = 70
 h_max = 119
-s_min = 98
+s_min = 100
 s_max = 228
-v_min = 170
+v_min = 115
 v_max = 255
 # h_min, s_min, v_min, h_max, s_max, v_max = 0, 0, 0, 179, 255, 255
 
@@ -263,7 +270,7 @@ while True:
         # eulerAngles = -cv2.decomposeProjectionMatrix(proj_matrix)[6]  # 欧拉角
         # pitch, yaw, roll = eulerAngles[0], eulerAngles[1], eulerAngles[2]
         # print(index, "distance:", distance, "pitch:", pitch, "yaw:", yaw, "roll:", roll)
-        marker_list.append(MT(cX, cY, 0, w, h, w*X_ERROR, h*Y_ERROR))
+        marker_list.append(MT(x, y, 0, w, h, w*X_ERROR, h*Y_ERROR))
         # cv2.line(dst, (cX, cY), CENTER_POINT, (0, 0, 255), 1)
         # distance = np.sqrt((cX - CENTER_POINT[0]) ** 2 + (cY - CENTER_POINT[1]) ** 2)
         # z = F * MARKER_W / w
@@ -291,7 +298,7 @@ while True:
         shoot_region = Region(center_x=CENTER_POINT[0], center_y=CENTER_POINT[1]+40,
                               w=shoot_marker.w * X_ERROR, h=shoot_marker.h * Y_ERROR,
                               expand_bottom=False)
-        if shoot_marker.is_shootable() and False:
+        if shoot_marker.is_shootable(shoot_region) and False:
             if time.time() - last_shoot_time > shoot_delay:
                 last_shoot_time = time.time()
                 robot.set_blaster_bead(1)
@@ -299,8 +306,8 @@ while True:
                 print('shoot')
         else:
             # 计算PID
-            x_pid.set_error(shoot_marker.get_x_error())
-            y_pid.set_error(shoot_marker.get_y_error())
+            x_pid.set_error(shoot_marker.get_x_error(shoot_region))
+            y_pid.set_error(shoot_marker.get_y_error(shoot_region))
             x_output = x_pid.get_output()
             y_output = y_pid.get_output()
             # if not min_pitch <= robot.get_gimbal_attitude()[0] <= max_pitch:

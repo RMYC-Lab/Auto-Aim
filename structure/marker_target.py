@@ -40,12 +40,16 @@ class MarkerTarget():
         # return CENTER_X - self.error_h / 2 < marker_center_x < CENTER_X + self.error_h / 2 and \
         #        CENTER_Y - self.error_w / 2 < marker_center_y < CENTER_Y + self.error_w / 2
 
-    def get_x_error(self):
+    def get_x_error(self, new_shoot_region: Union[Region, None] = None):
         marker_center_x = self.x + self.w / 2
+        if new_shoot_region is not None:
+            return (marker_center_x - new_shoot_region.center_x) / FULL_WIDTH
         return (marker_center_x - CENTER_X) / FULL_WIDTH
 
-    def get_y_error(self):
+    def get_y_error(self, new_shoot_region: Union[Region, None] = None):
         marker_center_y = self.y + self.h / 2
+        if new_shoot_region is not None:
+            return (new_shoot_region.center_y - marker_center_y) / FULL_HEIGHT
         return (CENTER_Y - marker_center_y) / FULL_HEIGHT
 
     def get_center_distance(self):
