@@ -1,25 +1,23 @@
-import serial
-import asyncio
+# import serial
+from robot_ctrl.uart.uart import UartProtocol
+from robot_ctrl.uart.format.command import Command
+from robot_ctrl.uart.commands import SdkCtrl
+from multiprocessing import Process, Queue
+
 
 class UartRobotCtrl():
     def __init__(self, port: str):
-        self.serial = serial.Serial()
-        self.serial.port = port
-        self.serial.baudrate = 115200
-        self.serial.bytesize = serial.EIGHTBITS
-        self.serial.stopbits = serial.STOPBITS_ONE
-        self.serial.parity = serial.PARITY_NONE
-        self.serial.timeout = 0.2
+        self._uart = UartProtocol(port)
 
     def connect(self, try_times: int = 3):
-        self.serial.open()
+        self._uart.open()
         for _ in range(try_times):
-            self.send('command;')  # 进入串口控制模式
-            recv = self.recv()
+            recv = self.send(SdkCtrl.enterSdk.build(), False, 5)  # 进入串口控制模式
             if recv == 'ok' or recv == 'Already in SDK mode':
                 return True
         return False
 
+    '''
     def gimbal_speed(self, pitch_speed: float, yaw_speed: float):
         """控制云台运动速度
 
@@ -80,7 +78,7 @@ class UartRobotCtrl():
         """打开云台推送"""
         self.send('gimbal push attitude on;')
         # return self.recv()
-    
+
     def gimbal_recenter(self):
         """云台回中"""
         self.send('gimbal recenter;')
@@ -88,16 +86,22 @@ class UartRobotCtrl():
 
     def disconnect(self):
         self.serial.close()
+    '''
 
-    def send(self, msg: str):
-        if not msg.endswith(';'):
-            msg += ';'
-        print('Uart send:', msg)
-        self.serial.write(msg.encode('utf-8'))
+    def send(self, cmd: Command, ignore_res: bool = True, timeout: float = 1):
+        return self._uart.send(cmd, ignore_res, timeout)
 
-    def recv(self):
-        recv_txt = self.serial.readall().decode('utf-8')
-        if recv_txt.endswith(';\n'):
-            recv_txt = recv_txt[:-2]
-        print('Uart recv:', recv_txt)
-        return recv_txt
+    # def send(self, msg: str):
+    #     if not msg.endswith(';'):
+    #         msg += ';'
+    #     print('Uart send:', msg)
+    #     self.serial.write(msg.encode('utf-8'))
+
+    # def recv(self):
+    #     recv_txt = self.serial.readall().decode('utf-8')
+    #     if recv_txt.endswith(';\n'):
+    #         recv_txt = recv_txt[:-2]
+    #     print('Uart recv:', recv_txt)
+    #     return recv_txt
+
+

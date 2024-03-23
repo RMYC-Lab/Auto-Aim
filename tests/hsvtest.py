@@ -132,7 +132,7 @@ cap = cv2.VideoCapture(0)
 while not cap.isOpened():
     ...
 
-cap.set(cv2.CAP_PROP_EXPOSURE, -8)
+# cap.set(cv2.CAP_PROP_EXPOSURE, -8)
 cap.set(3, SIZE[0])
 cap.set(4, SIZE[1])
 

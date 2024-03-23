@@ -1,6 +1,7 @@
 # -*-coding:utf-8-*-
 import cv2
 import numpy as np
+# from multiprocessing import Queue
 from utils.colors import RED_COLOR, GREEN_COLOR
 import json
 import math
@@ -10,6 +11,7 @@ from structure.marker_target import set_center, set_shoot_region, set_full_resol
 from service.uart import UartRobotCtrl
 from utils.pid import PIDCtrl
 from utils.region import Region
+# from tasks.camera import CameraTask
 from typing import List
 
 # x_pid = PIDCtrl(0.06, 0.001, 0.01)
@@ -22,17 +24,12 @@ PORT = 'COM3'
 
 # 初始化机器人
 robot = UartRobotCtrl(PORT)
-times = 3
-is_connected = False
 shoot_delay = 0.5
 max_follow_time = 0.7
 max_pitch = 20
 min_pitch = -20
-while is_connected is False and times > 0:
-    is_connected = robot.connect()
-    times -= 1
 
-if is_connected is False:
+if robot.connect() is False:
     print('Connect failed')
     raise Exception('Connect failed')
 
@@ -76,11 +73,18 @@ WRONG_COLOR = RED_COLOR
 # v_min = 170
 # v_max = 255
 # BLUE3
-h_min = 70
+# h_min = 70
+# h_max = 119
+# s_min = 100
+# s_max = 228
+# v_min = 115
+# v_max = 255
+# BLUE4
+h_min = 58
 h_max = 119
-s_min = 100
-s_max = 228
-v_min = 115
+s_min = 71
+s_max = 249
+v_min = 135
 v_max = 255
 # h_min, s_min, v_min, h_max, s_max, v_max = 0, 0, 0, 179, 255, 255
 
@@ -92,6 +96,11 @@ dist_coeffs = np.load('configs/dist_coeffs.npy')
 def get_x_y(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
         print(x, y)
+
+
+# frame_queue = Queue()
+# camera_task = CameraTask(frame_queue, 2)
+# camera_task.start()
 
 
 # 打开摄像头
@@ -121,6 +130,9 @@ while True:
     ret, frame = cap.read()
     if not ret:
         continue
+    # frame = frame_queue.get()
+    # if frame is None:
+    #     continue
     # frame = frame[12: 720, 21: 1280]
     # 校准图像
     frame = cv2.undistort(frame, camera_matrix, dist_coeffs)
@@ -304,16 +316,15 @@ while True:
                 robot.set_blaster_bead(1)
                 robot.blaster_fire()
                 print('shoot')
-        else:
-            # 计算PID
-            x_pid.set_error(shoot_marker.get_x_error(shoot_region))
-            y_pid.set_error(shoot_marker.get_y_error(shoot_region))
-            x_output = x_pid.get_output()
-            y_output = y_pid.get_output()
-            # if not min_pitch <= robot.get_gimbal_attitude()[0] <= max_pitch:
-            #     x_output = 0
-            robot.gimbal_speed(y_output, x_output)
-            print('move')
+        # 计算PID
+        x_pid.set_error(shoot_marker.get_x_error(shoot_region))
+        y_pid.set_error(shoot_marker.get_y_error(shoot_region))
+        x_output = x_pid.get_output()
+        y_output = y_pid.get_output()
+        # if not min_pitch <= robot.get_gimbal_attitude()[0] <= max_pitch:
+        #     x_output = 0
+        robot.gimbal_speed(y_output, x_output)
+        print('move')
 
     if time.time() - last_find_time > max_follow_time:
         # robot.gimbal_speed(0, 0)

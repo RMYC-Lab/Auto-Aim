@@ -23,8 +23,8 @@ while not cap.isOpened():
     ...
 
 while True:
-    #曝光
-      #设置曝光值 1.0 - 5000  156.0
+    # 曝光
+    # 设置曝光值 1.0 - 5000  156.0
     # 从摄像头中读取一帧图像
     ret, frame = cap.read()
     # frame = frame[12: 720, 21: 1280]
